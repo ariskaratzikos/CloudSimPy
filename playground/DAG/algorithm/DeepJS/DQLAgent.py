@@ -2,6 +2,7 @@ import numpy as np
 import os
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
+from tensorflow.keras.losses import MeanSquaredError
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Flatten
 from collections import deque
 import random
@@ -42,25 +43,30 @@ class DQLAgent:
         model.add(LSTM(64, input_shape=(self.sequence_length, self.state_size + self.action_size), return_sequences=False))
         model.add(Dense(64, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))  # 'linear' for continuous actions or Q-values
-        model.compile(loss='mse', optimizer='adam')
+        model.compile(loss=MeanSquaredError(), optimizer='adam')
+        return model
 
     def remember(self, sequence, next_state, reward, done):
         self.memory.append((sequence, next_state, reward, done))
 
-    def act(self, state):
-        """Returns action based on a given state, following an epsilon-greedy policy."""
-        print("epsilon value is ", self.epsilon)
+    def act(self, current_state):
+        # Epsilon-greedy action selection
         if np.random.rand() <= self.epsilon:
-            print("i selected randomly")
-            return random.randrange(self.action_size)
+            print("I chode randomly with epsilon value", self.epsilon)
+            return np.random.randint(0, self.action_size)
+
         # Initialize the sequence with zeros
         current_sequence = np.zeros((1, self.sequence_length, self.state_size + self.action_size))
+        
         # Fill in the sequence with data from the sequence buffer
         for i, (state, action) in enumerate(self.sequence_buffer):
             current_sequence[0, i, :self.state_size] = state
             current_sequence[0, i, self.state_size:] = action
+        
         # Add the current state as the last element in the sequence with a dummy action
-        current_sequence[0, 2, :self.state_size] = current_state  # Assuming the current state is the third element
+        current_sequence[0, -1, :self.state_size] = current_state
+
+        # Predict the action based on the input sequence
         act_values = self.model.predict(current_sequence)
         return np.argmax(act_values[0])
 
