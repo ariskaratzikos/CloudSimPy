@@ -44,10 +44,16 @@ class Cluster(object):
     
     @property
     def unfinished_instances(self):
-        ls = []
-        for task in self.unfinished_tasks:
-            ls.extend(task.unfinished_task_instances)
-        return ls
+        if self.child_clusters is not None:
+            instances = []
+            for child in self.child_clusters:
+                instances.append(child.unfinished_instances)
+            return instances
+        else:
+            ls = []
+            for task in self.unfinished_tasks:
+                ls.extend(task.unfinished_task_instances)
+            return len(ls)
 
     @property
     def ready_unfinished_tasks(self):
@@ -69,7 +75,7 @@ class Cluster(object):
             tasks = []
             for child in self.child_clusters:
                 tasks.extend(child.ready_tasks_which_has_waiting_instance)
-            return jobs
+            return tasks
         else:
             ls = []
             for job in self.jobs:

@@ -14,7 +14,7 @@ class DQLAgent:
         self.state_size = state_size
         self.action_size = action_size
         self.sequence_length = sequence_length  # Length of the input sequence
-        self.sequence_buffer = deque([], maxlen=2)  # Buffer to hold last 2 state-action pairs
+        self.sequence_buffer = deque([], maxlen=3)  # Buffer to hold last 3 state-action pairs
         self.memory = deque(maxlen=2000)  # Replay buffer
         self.gamma = gamma  # Discount rate
         self.epsilon = 0.4  # Exploration rate
@@ -36,14 +36,17 @@ class DQLAgent:
             self.model = model
 
     def _build_model(self):
-        """Builds a deep neural network model with LSTM layers."""
+        """Builds a more complex deep neural network model to handle high dimensionality."""
         model = Sequential()
-        # Assuming state and action are concatenated in the input sequence
-        # Input shape [sequence_length, state_size + action_size]
-        model.add(LSTM(64, input_shape=(self.sequence_length, self.state_size + self.action_size), return_sequences=False))
-        model.add(Dense(64, activation='relu'))
-        model.add(Dense(self.action_size, activation='linear'))  # 'linear' for continuous actions or Q-values
-        model.compile(loss=MeanSquaredError(), optimizer='adam')
+        model.add(LSTM(128, input_shape=(self.sequence_length, self.state_size + self.action_size), return_sequences=True))
+        model.add(Dropout(0.2))
+        model.add(LSTM(64, return_sequences=False))
+        model.add(Dropout(0.2))
+        model.add(Dense(128, activation='relu', kernel_regularizer=l2(0.01)))
+        model.add(Dropout(0.2))
+        model.add(Dense(64, activation='relu', kernel_regularizer=l2(0.01)))
+        model.add(Dense(self.action_size, activation='linear'))
+        model.compile(loss=MeanSquaredError(), optimizer=Adam(learning_rate=self.learning_rate))
         return model
 
     def remember(self, sequence, next_state, reward, done):
@@ -52,7 +55,7 @@ class DQLAgent:
     def act(self, current_state):
         # Epsilon-greedy action selection
         if np.random.rand() <= self.epsilon:
-            print("I chode randomly with epsilon value", self.epsilon)
+            print("I chose randomly with epsilon value", self.epsilon)
             return np.random.randint(0, self.action_size)
 
         # Initialize the sequence with zeros
@@ -67,6 +70,7 @@ class DQLAgent:
         current_sequence[0, -1, :self.state_size] = current_state
 
         # Predict the action based on the input sequence
+        # print(current_sequence)
         act_values = self.model.predict(current_sequence)
         return np.argmax(act_values[0])
 
@@ -87,24 +91,27 @@ class DQLAgent:
         return formatted_sequence
 
     def replay(self, batch_size):
-        minibatch = random.sample(self.memory, batch_size)
-        for sequence, next_state, reward, done in minibatch:
-            input_sequence = self.prepare_sequence(sequence)
-            target_f = self.model.predict(input_sequence)
-            
-            if not done:
-                next_state_input = np.reshape(next_state, (1, 1, self.state_size))  # Single timestep sequence for next state
-                next_state_input = np.concatenate([next_state_input, np.zeros((1, 1, self.action_size))], axis=-1)  # Append dummy action
-                next_q_value = np.amax(self.model.predict(next_state_input)[0])
-                update_target = reward + self.gamma * next_q_value
-            else:
-                update_target = reward
-            
-            # Assuming the last action in the sequence is what we want to update
-            action_index = np.argmax(target_f[0])  # This might need adjustment based on how you track actions
-            target_f[0][action_index] = update_target
+        self.timestep_since_last_update += 1
+        if self.timestep_since_last_update >= self.update_frequency:
+            minibatch = random.sample(self.memory, batch_size)
+            for sequence, next_state, reward, done in minibatch:
+                input_sequence = self.prepare_sequence(sequence)
+                target_f = self.model.predict(input_sequence)
+                
+                if not done:
+                    next_state_input = np.reshape(next_state, (1, 1, self.state_size))  # Single timestep sequence for next state
+                    next_state_input = np.concatenate([next_state_input, np.zeros((1, 1, self.action_size))], axis=-1)  # Append dummy action
+                    next_q_value = np.amax(self.model.predict(next_state_input)[0])
+                    update_target = reward + self.gamma * next_q_value
+                else:
+                    update_target = reward
+                
+                # Assuming the last action in the sequence is what we want to update
+                action_index = np.argmax(target_f[0])  # This might need adjustment based on how you track actions
+                target_f[0][action_index] = update_target
 
-            self.model.fit(input_sequence, target_f, epochs=1, verbose=0)
+                self.model.fit(input_sequence, target_f, epochs=1, verbose=0)
+        self.timestep_since_last_update = 0
 
     def save_model(self):
         model_dir = 'DAG/algorithm/DeepJS/agents/%s' % self.name

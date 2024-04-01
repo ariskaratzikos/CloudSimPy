@@ -1,7 +1,7 @@
 import numpy as np
 
 from playground.DAG.algorithm.heuristics.redirect_workloads import *
-from playground.auxiliary.round_up_down import round_to_threshold
+from playground.auxiliary.round_up_down import *
 
 class DQLScheduler:
     def __init__(self, agent, cluster, reward_giver):
@@ -13,18 +13,12 @@ class DQLScheduler:
 
     def act_on_pause(self, current_state, batch_size):
         current_state = np.array(current_state, dtype=np.float32).reshape(1, -1)  # Reshape for consistency
-        # Calculate reward only if there's a last_state
         if self.last_state is not None:
             reward = self.reward_giver.get_overall_reward()
-        # Call the act method to select an action
         action = self.agent.act(current_state)
-        # Apply the selected action
         self.apply_action(action)
         if self.last_state is not None:
-            # After action is decided and if we had a valid last_state, remember the sequence
             self.agent.remember(self.agent.sequence_buffer, current_state, reward, False)
-        # Update the sequence buffer with the new state and action, but ensure there's a last state to reference
-        if self.last_state is not None:
             self.agent.update_sequence_buffer(self.last_state, action)
         # Update the last_state with the current state for the next call
         self.last_state = current_state
@@ -36,27 +30,30 @@ class DQLScheduler:
     def extract_state(self):
         state = []
         usage = self.cluster.usage
-        usage = round_to_threshold(usage, [0, 0.2, 0.4, 0.6, 0.8, 0.95])
+        usage = min_max_normalize_list(usage, 0 ,1)
+        # usage = round_to_threshold(usage, [0, 0.2, 0.4, 0.6, 0.8, 0.95])
         capacities = self.cluster.capacities
+        capacities = min_max_normalize_list(capacities, 0 , 800)
+        # capacities = round_to_threshold(capacities, [0, 10, 30, 50, 100, 200, 300, 500, 1000])
         state.extend(usage)
         state.extend(capacities)
         nodes_num_usage = self.cluster.nodes_num_usage
-        nodes_num_usage = round_to_threshold(nodes_num_usage, [0, 0.05, 0.2, 0.4, 0.6, 0.8, 0.9, 1])
+        nodes_num_usage = min_max_normalize_list(nodes_num_usage, 0 ,1)
+        # nodes_num_usage = round_to_threshold(nodes_num_usage, [0, 0.05, 0.2, 0.4, 0.6, 0.8, 0.9, 1])
         state.extend(nodes_num_usage)
         # anomalous_usage = self.cluster.anomalous_usage
         # state.extend(anomalous_usage)
         response_time = self.cluster.overall_response_time
-        response_time = round_to_threshold(response_time, [0, 100, 300, 500, 800, 1000, 3000, 5000, 8000, 10000])
+        response_time = min_max_normalize_list(response_time, 0 , 10000)
+        # response_time = round_to_threshold(response_time, [0, 100, 300, 500, 800, 1000, 3000, 5000, 8000, 10000])
         state.extend(response_time)
-        active_workloads = self.cluster.separate_len_running_task_instances
-        active_workloads = round_to_threshold(active_workloads, [0, 1, 5, 20, 50, 150, 300, 500, 2000])
-        state.extend(active_workloads)
-        waiting_workloads = self.cluster.separate_len_waiting_task_instances
-        waiting_workloads = round_to_threshold(waiting_workloads, [0, 1, 5, 20, 50, 150, 300, 500, 2000, 3000 , 4000])
-        state.extend(waiting_workloads)
-        active_service_workloads = self.cluster.service_running_task_instances
-        active_service_workloads = round_to_threshold(active_service_workloads, [0, 1, 5, 20, 50, 150, 300, 500, 2000])
-        state.extend(active_service_workloads)
+        unfinished_workloads = self.cluster.unfinished_instances
+        unfinished_workloads = min_max_normalize_list(unfinished_workloads, 0 , 10000)
+        # unfinished_workloads = round_to_threshold(unfinished_workloads, [0, 1, 5, 20, 50, 150, 300, 500, 2000, 3000 , 4000, 6000, 8000, 10000])
+        state.extend(unfinished_workloads)
+        # active_service_workloads = self.cluster.service_running_task_instances
+        # active_service_workloads = round_to_threshold(active_service_workloads, [0, 1, 5, 20, 50, 150, 300, 500, 2000])
+        # state.extend(active_service_workloads)
         # metrics_unstarted_workloads = self.cluster.metrics_unstarted_instances
         # state.extend(metrics_unstarted_workloads)
         flattened_state = [element for sublist in state for element in (sublist if isinstance(sublist, list) else [sublist])]

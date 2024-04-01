@@ -73,11 +73,11 @@ class Episode(object):
             model_dir = 'DAG/algorithm/DeepJS/agents/%s' % jobs_num
             model_path = os.path.join(model_dir, 'model.h5')
             if os.path.exists(model_path):
-                model = load_model(model_path)
-                self.agent = DQLAgent(27, 16, 0.95, jobs_num, 3, model)
+                model = load_model(model_path, custom_objects={'mse': MeanSquaredError()})
+                self.agent = DQLAgent(21, 16, 0.95, jobs_num, 3, model)
                 print("i loaded a pre-existing model")
             else:
-                self.agent = DQLAgent(27, 16, 0.95, jobs_num, 3)
+                self.agent = DQLAgent(21, 16, 0.95, jobs_num, 3)
             reward_giver = RewardGiver(cluster)
             self.scheduler = DQLScheduler(self.agent, cluster, reward_giver)
 

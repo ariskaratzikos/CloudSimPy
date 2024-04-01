@@ -19,7 +19,7 @@ def round_to_threshold(input_list, thresholds):
 
     return ls
 
-# # Example usage:
-# value = 0.35
-# rounded_value = round_to_threshold(value)
-# print(f"The value {value} is rounded to {rounded_value}")
+def min_max_normalize_list(input_list, min_value, max_value):
+    flattened_list = [element for sublist in input_list for element in (sublist if isinstance(sublist, list) else [sublist])]
+    normalized_values = [(x - min_value) / (max_value - min_value) for x in flattened_list]
+    return normalized_values
