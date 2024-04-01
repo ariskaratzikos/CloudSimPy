@@ -12,22 +12,33 @@ class DQLScheduler:
         self.last_action = None
 
     def act_on_pause(self, current_state, batch_size):
-
-        # Calculate reward and next state only if update_model is True and there's a last_state
-        reward = self.reward_giver.get_overall_reward()  # Implement reward calculation
-
-        current_state = np.array(current_state, dtype=np.float32)
-        current_state = np.expand_dims(current_state, axis=0)  # Add batch dimension
+        # Calculate reward only if there's a last_state
         if self.last_state is not None:
-            self.agent.remember(self.last_state, self.last_action, reward, current_state, False)
-        
-            if len(self.agent.memory) > batch_size:
-                self.agent.replay(batch_size, 4)
+            reward = self.reward_giver.get_overall_reward()
 
-        # Select and apply action for the current pause
-        self.last_action = self.agent.act(current_state)
-        self.apply_action(self.last_action)
-        self.last_state = current_state  # Store current state for the next call
+            current_state = np.array(current_state, dtype=np.float32).reshape(1, -1)  # Reshape for consistency
+            
+            # Form the current sequence for action prediction
+            # Note: This step assumes `update_sequence_buffer` and `act` are designed to handle sequences correctly.
+            self.agent.update_sequence_buffer(self.last_state, self.last_action)
+            
+            # Now, the sequence buffer already contains the most recent state-action pair
+            # Let's prepare it for passing to the model
+            current_sequence = [self.agent.sequence_buffer[i] for i in range(len(self.agent.sequence_buffer))]
+            current_sequence.append((current_state, np.zeros((1, self.agent.action_size))))  # Append current state with dummy action
+            
+            # Select and apply action for the current pause
+            self.last_action = self.agent.act(np.array(current_sequence))  # Ensure `act` method is adapted for sequences
+            self.apply_action(self.last_action)
+
+            # After action is decided, remember the sequence
+            if len(current_sequence) == self.agent.sequence_length:  # Check if we have a complete sequence
+                # Convert sequence for storage: This might need adjustment based on how you manage state and action dimensions
+                formatted_sequence = self.agent.prepare_sequence(current_sequence)
+                self.agent.remember(formatted_sequence, current_state, reward, False)  # Assuming `False` for `done`
+            
+            # Update the last_state for the next call
+            self.last_state = current_state
 
     def extract_state(self):
         state = []

@@ -2,16 +2,18 @@ import numpy as np
 import os
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Flatten
 from collections import deque
 import random
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import l2
 
 class DQLAgent:
-    def __init__(self, state_size, action_size, gamma, name, model=None):
+    def __init__(self, state_size, action_size, gamma, name, sequence_length, model=None):
         self.state_size = state_size
         self.action_size = action_size
+        self.sequence_length = sequence_length  # Length of the input sequence
+        self.sequence_buffer = deque([], maxlen=2)  # Buffer to hold last 2 state-action pairs
         self.memory = deque(maxlen=2000)  # Replay buffer
         self.gamma = gamma  # Discount rate
         self.epsilon = 0.4  # Exploration rate
@@ -31,51 +33,19 @@ class DQLAgent:
             self.model = self._build_model()
         else:
             self.model = model
-        
-    # def _build_model(self):
-    #     """Builds a deep neural network model."""
-    #     model = Sequential()
-    #     model.add(Dense(24, input_dim=self.state_size, activation='relu'))
-    #     model.add(Dense(24, activation='relu'))
-    #     model.add(Dense(self.action_size, activation='linear'))
-    #     model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(lr=self.learning_rate))
-    #     return model
-    
-    # def _build_model(self):
-    #     """Builds a deep neural network model."""
-    #     model = Sequential()
-    #     model.add(Dense(3, input_dim=self.state_size, activation='relu'))
-    #     model.add(Dense(9, activation='relu'))
-    #     model.add(Dense(18, activation='relu'))
-    #     model.add(Dense(24, activation='relu'))
-    #     model.add(Dense(9, activation='relu'))
-    #     model.add(Dense(self.action_size, activation='linear'))
-    #     model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(lr=self.learning_rate))
-    #     return model
 
     def _build_model(self):
-        """Builds a deep neural network model with added regularization."""
+        """Builds a deep neural network model with LSTM layers."""
         model = Sequential()
-        # Input layer
-        model.add(Dense(64, input_dim=self.state_size, activation='relu', kernel_regularizer=l2(0.01)))
-        model.add(Dropout(0.2))
-        # Hidden layers
-        model.add(Dense(128, activation='relu', kernel_regularizer=l2(0.01)))
-        model.add(Dropout(0.2))
-        model.add(Dense(128, activation='relu', kernel_regularizer=l2(0.01)))
-        model.add(Dropout(0.2))
-        model.add(Dense(64, activation='relu', kernel_regularizer=l2(0.01)))
-        model.add(Dropout(0.2))
-        # Output layer
-        model.add(Dense(self.action_size, activation='linear'))
-        # Compile model
-        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
+        # Assuming state and action are concatenated in the input sequence
+        # Input shape [sequence_length, state_size + action_size]
+        model.add(LSTM(64, input_shape=(self.sequence_length, self.state_size + self.action_size), return_sequences=False))
+        model.add(Dense(64, activation='relu'))
+        model.add(Dense(self.action_size, activation='linear'))  # 'linear' for continuous actions or Q-values
+        model.compile(loss='mse', optimizer='adam')
 
-        return model
-
-    def remember(self, state, action, reward, next_state, done):
-        """Stores experiences in the replay buffer."""
-        self.memory.append((state, action, reward, next_state, done))
+    def remember(self, sequence, next_state, reward, done):
+        self.memory.append((sequence, next_state, reward, done))
 
     def act(self, state):
         """Returns action based on a given state, following an epsilon-greedy policy."""
@@ -83,24 +53,52 @@ class DQLAgent:
         if np.random.rand() <= self.epsilon:
             print("i selected randomly")
             return random.randrange(self.action_size)
-        act_values = self.model.predict(state)
+        # Initialize the sequence with zeros
+        current_sequence = np.zeros((1, self.sequence_length, self.state_size + self.action_size))
+        # Fill in the sequence with data from the sequence buffer
+        for i, (state, action) in enumerate(self.sequence_buffer):
+            current_sequence[0, i, :self.state_size] = state
+            current_sequence[0, i, self.state_size:] = action
+        # Add the current state as the last element in the sequence with a dummy action
+        current_sequence[0, 2, :self.state_size] = current_state  # Assuming the current state is the third element
+        act_values = self.model.predict(current_sequence)
         return np.argmax(act_values[0])
 
+    def update_sequence_buffer(self, state, action):
+        # Ensure 'action' is one-hot encoded if it isn't already
+        action_vector = np.zeros(self.action_size)
+        action_vector[action] = 1
+        # Add the state-action pair to the sequence buffer
+        self.sequence_buffer.append((state, action_vector))
+    
+    def prepare_sequence(self, sequence):
+        # Assuming 'sequence' is a list of (state, action) tuples
+        # Concatenate state and action for each pair and prepare for LSTM input
+        formatted_sequence = np.zeros((1, self.sequence_length, self.state_size + self.action_size))
+        for i, (state, action) in enumerate(sequence):
+            formatted_sequence[0, i, :self.state_size] = state  # Assign state part
+            formatted_sequence[0, i, self.state_size:] = action  # Assign action part
+        return formatted_sequence
+
     def replay(self, batch_size):
-        """Trains the model using randomly sampled experiences from the replay buffer."""
-        self.timestep_since_last_update += 1
-        if self.timestep_since_last_update >= self.update_frequency:
-            minibatch = random.sample(self.memory, batch_size)
-            for state, action, reward, next_state, done in minibatch:
-                target = reward
-                if not done:
-                    target = reward + self.gamma * np.amax(self.model.predict(next_state)[0])
-                target_f = self.model.predict(state)
-                target_f[0][action] = target
-                self.model.fit(state, target_f, epochs=1, verbose=0)
-            if self.epsilon > self.epsilon_min:
-                self.epsilon *= self.epsilon_decay
-            self.timestep_since_last_update = 0
+        minibatch = random.sample(self.memory, batch_size)
+        for sequence, next_state, reward, done in minibatch:
+            input_sequence = self.prepare_sequence(sequence)
+            target_f = self.model.predict(input_sequence)
+            
+            if not done:
+                next_state_input = np.reshape(next_state, (1, 1, self.state_size))  # Single timestep sequence for next state
+                next_state_input = np.concatenate([next_state_input, np.zeros((1, 1, self.action_size))], axis=-1)  # Append dummy action
+                next_q_value = np.amax(self.model.predict(next_state_input)[0])
+                update_target = reward + self.gamma * next_q_value
+            else:
+                update_target = reward
+            
+            # Assuming the last action in the sequence is what we want to update
+            action_index = np.argmax(target_f[0])  # This might need adjustment based on how you track actions
+            target_f[0][action_index] = update_target
+
+            self.model.fit(input_sequence, target_f, epochs=1, verbose=0)
 
     def save_model(self):
         model_dir = 'DAG/algorithm/DeepJS/agents/%s' % self.name
