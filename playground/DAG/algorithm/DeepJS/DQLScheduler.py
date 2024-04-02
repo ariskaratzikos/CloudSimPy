@@ -19,7 +19,7 @@ class DQLScheduler:
         self.apply_action(action)
         if self.last_state is not None:
             self.agent.remember(self.agent.sequence_buffer, current_state, reward, False)
-            self.agent.update_sequence_buffer(self.last_state, action)
+            self.agent.update_sequence_buffer(current_state, action)
         # Update the last_state with the current state for the next call
         self.last_state = current_state
 
@@ -48,7 +48,7 @@ class DQLScheduler:
         # response_time = round_to_threshold(response_time, [0, 100, 300, 500, 800, 1000, 3000, 5000, 8000, 10000])
         state.extend(response_time)
         unfinished_workloads = self.cluster.unfinished_instances
-        unfinished_workloads = min_max_normalize_list(unfinished_workloads, 0 , 10000)
+        unfinished_workloads = min_max_normalize_list(unfinished_workloads, 0 , 100000)
         # unfinished_workloads = round_to_threshold(unfinished_workloads, [0, 1, 5, 20, 50, 150, 300, 500, 2000, 3000 , 4000, 6000, 8000, 10000])
         state.extend(unfinished_workloads)
         # active_service_workloads = self.cluster.service_running_task_instances
@@ -105,4 +105,6 @@ class DQLScheduler:
             self.cluster.remove_nodes(1, 1)
         if action == 15: #cluster 2 - 1 node scale down
             self.cluster.remove_nodes(2, 1)
+        if action == 16: #neutral action for the lstm functionality
+            return
         

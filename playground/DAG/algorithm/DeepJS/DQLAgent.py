@@ -53,30 +53,34 @@ class DQLAgent:
         self.memory.append((sequence, next_state, reward, done))
 
     def act(self, current_state):
-        # Epsilon-greedy action selection
-        if np.random.rand() <= self.epsilon:
-            print("I chose randomly with epsilon value", self.epsilon)
-            return np.random.randint(0, self.action_size)
-
         # Initialize the sequence with zeros
         current_sequence = np.zeros((1, self.sequence_length, self.state_size + self.action_size))
-        
-        # Fill in the sequence with data from the sequence buffer
-        for i, (state, action) in enumerate(self.sequence_buffer):
-            current_sequence[0, i, :self.state_size] = state
-            current_sequence[0, i, self.state_size:] = action
+        current_sequence[0,-1,self.state_size + self.action_size - 1] = 1
+
+        if len(self.sequence_buffer) == 3:  # Assuming sequence_length == 3
+            buffer_list = list(self.sequence_buffer)  # Convert deque to list for easier indexing
+            # Fill in N-2 and N-1 moments from the sequence buffer
+            for i in range(1, 3):  # i.e., buffer_list[-2:] for the last two elements
+                state, action = buffer_list[i]  # Adjusted indexing for last two elements
+                current_sequence[0, i-1, :self.state_size] = state
+                current_sequence[0, i-1, self.state_size:] = action
         
         # Add the current state as the last element in the sequence with a dummy action
         current_sequence[0, -1, :self.state_size] = current_state
         print(current_sequence)
-
-        # Predict the action based on the input sequence
-        # print(current_sequence)
         act_values = self.model.predict(current_sequence)
         print(act_values)
-        # activations = self.get_lstm_activations(current_sequence)
-        # print(activations)
-        return np.argmax(act_values[0])
+
+        # Epsilon-greedy action selection
+        if np.random.rand() <= self.epsilon:
+            print("I chose randomly with epsilon value", self.epsilon)
+            return np.random.randint(0, self.action_size)
+        else:
+            # act_values = self.model.predict(current_sequence)
+            # print(act_values)
+            # activations = self.get_lstm_activations(current_sequence)
+            # print(activations)
+            return np.argmax(act_values[0])
 
     def update_sequence_buffer(self, state, action):
         # Ensure 'action' is one-hot encoded if it isn't already

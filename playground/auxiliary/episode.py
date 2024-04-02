@@ -71,15 +71,16 @@ class Episode(object):
         self.simulation = Simulation(self.env, cluster, task_broker, near_scheduler, far_scheduler, cloud_scheduler, event_file)
 
         if self.method == 1:
-            model_dir = 'DAG/algorithm/DeepJS/agents/%s' % 58
+            jobs_num = 291
+            model_dir = 'DAG/algorithm/DeepJS/agents/%s' % jobs_num
             model_path = os.path.join(model_dir, 'model.h5')
             if os.path.exists(model_path):
                 model = load_model(model_path, custom_objects={'loss': MeanSquaredError()})
                 model.compile(optimizer='adam', loss='mean_squared_error')
-                self.agent = DQLAgent(21, 16, 0.95, jobs_num, 3, model)
+                self.agent = DQLAgent(21, 17, 0.95, jobs_num, 3, model)
                 print("i loaded a pre-existing model")
             else:
-                self.agent = DQLAgent(21, 16, 0.95, jobs_num, 3)
+                self.agent = DQLAgent(21, 17, 0.95, jobs_num, 3)
             reward_giver = RewardGiver(cluster)
             self.scheduler = DQLScheduler(self.agent, cluster, reward_giver)
 
