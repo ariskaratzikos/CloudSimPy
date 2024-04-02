@@ -4,6 +4,7 @@ import pandas as pd
 import math
 
 from tensorflow.keras.models import load_model
+from tensorflow.keras.losses import MeanSquaredError
 from playground.DAG.utils.csv_reader import CSVReader
 from core.central_cluster import Cluster
 from core.scheduler import Scheduler
@@ -73,7 +74,8 @@ class Episode(object):
             model_dir = 'DAG/algorithm/DeepJS/agents/%s' % jobs_num
             model_path = os.path.join(model_dir, 'model.h5')
             if os.path.exists(model_path):
-                model = load_model(model_path, custom_objects={'mse': MeanSquaredError()})
+                model = load_model(model_path, custom_objects={'loss': MeanSquaredError()})
+                model.compile(optimizer='adam', loss='mean_squared_error')
                 self.agent = DQLAgent(21, 16, 0.95, jobs_num, 3, model)
                 print("i loaded a pre-existing model")
             else:

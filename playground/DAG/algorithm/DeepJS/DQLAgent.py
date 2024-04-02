@@ -17,7 +17,7 @@ class DQLAgent:
         self.sequence_buffer = deque([], maxlen=3)  # Buffer to hold last 3 state-action pairs
         self.memory = deque(maxlen=2000)  # Replay buffer
         self.gamma = gamma  # Discount rate
-        self.epsilon = 0.4  # Exploration rate
+        self.epsilon = 0.7  # Exploration rate
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
         self.learning_rate = 0.001
@@ -72,6 +72,7 @@ class DQLAgent:
         # Predict the action based on the input sequence
         # print(current_sequence)
         act_values = self.model.predict(current_sequence)
+        print(act_values)
         return np.argmax(act_values[0])
 
     def update_sequence_buffer(self, state, action):
@@ -111,7 +112,7 @@ class DQLAgent:
                 target_f[0][action_index] = update_target
 
                 self.model.fit(input_sequence, target_f, epochs=1, verbose=0)
-        self.timestep_since_last_update = 0
+            self.timestep_since_last_update = 0
 
     def save_model(self):
         model_dir = 'DAG/algorithm/DeepJS/agents/%s' % self.name
