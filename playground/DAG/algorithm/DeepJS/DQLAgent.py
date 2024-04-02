@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
+from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.losses import MeanSquaredError
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Flatten
 from collections import deque
@@ -39,11 +39,11 @@ class DQLAgent:
         """Builds a more complex deep neural network model to handle high dimensionality."""
         model = Sequential()
         model.add(LSTM(128, input_shape=(self.sequence_length, self.state_size + self.action_size), return_sequences=True))
-        model.add(Dropout(0.2))
+        # model.add(Dropout(0.2))
         model.add(LSTM(64, return_sequences=False))
-        model.add(Dropout(0.2))
+        # model.add(Dropout(0.2))
         model.add(Dense(128, activation='relu', kernel_regularizer=l2(0.01)))
-        model.add(Dropout(0.2))
+        # model.add(Dropout(0.2))
         model.add(Dense(64, activation='relu', kernel_regularizer=l2(0.01)))
         model.add(Dense(self.action_size, activation='linear'))
         model.compile(loss=MeanSquaredError(), optimizer=Adam(learning_rate=self.learning_rate))
@@ -68,11 +68,14 @@ class DQLAgent:
         
         # Add the current state as the last element in the sequence with a dummy action
         current_sequence[0, -1, :self.state_size] = current_state
+        print(current_sequence)
 
         # Predict the action based on the input sequence
         # print(current_sequence)
         act_values = self.model.predict(current_sequence)
         print(act_values)
+        # activations = self.get_lstm_activations(current_sequence)
+        # print(activations)
         return np.argmax(act_values[0])
 
     def update_sequence_buffer(self, state, action):
@@ -121,6 +124,16 @@ class DQLAgent:
         model_path = os.path.join(model_dir, 'model.h5')
         self.model.save(model_path)
         # self.model.save(model_dir)
+    
+    def get_lstm_activations(self, input_sequence):
+        # Extract LSTM layers based on their class
+        lstm_layers = [layer for layer in self.model.layers if isinstance(layer, tf.keras.layers.LSTM)]
+        # Create a new Model that will output the activations from the LSTM layers
+        activation_model = Model(inputs=self.model.input, outputs=[layer.output for layer in lstm_layers])
+        
+        # Predict to get the activations
+        activations = activation_model.predict(input_sequence)
+        return activations
 
 # Example usage within SimPy environment
 # agent = DQLAgent(state_size=12, action_size=21)  # Define appropriate sizes

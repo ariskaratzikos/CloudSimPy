@@ -71,7 +71,7 @@ class Episode(object):
         self.simulation = Simulation(self.env, cluster, task_broker, near_scheduler, far_scheduler, cloud_scheduler, event_file)
 
         if self.method == 1:
-            model_dir = 'DAG/algorithm/DeepJS/agents/%s' % jobs_num
+            model_dir = 'DAG/algorithm/DeepJS/agents/%s' % 58
             model_path = os.path.join(model_dir, 'model.h5')
             if os.path.exists(model_path):
                 model = load_model(model_path, custom_objects={'loss': MeanSquaredError()})
